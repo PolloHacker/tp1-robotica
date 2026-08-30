@@ -38,8 +38,37 @@ def transformToRobotFrame(T_world_robot, T_world_object):
     return T_robot_world @ T_world_object
 
 
+def get_label_offset(x, y, x_ref=0, y_ref=0, name="", base_dist=0.35):
+    """
+    Calcula o deslocamento radial do texto a partir da origem do referencial,
+    com pequenos ajustes para evitar sobreposição em objetos vizinhos na cena.
+    """
+    dx = x - x_ref
+    dy = y - y_ref
+    dist = np.hypot(dx, dy)
+    
+    if dist > 1e-3:
+        off_x = (dx / dist) * base_dist
+        off_y = (dy / dist) * base_dist
+    else:
+        off_x, off_y = 0.0, base_dist
+
+    # Pequenos ajustes para descolar elementos vizinhos na cena
+    if "Mesa" in name:
+        off_y += 0.28
+    elif "Quadcóptero 1" in name:
+        off_y -= 0.28
+    elif "Robô NAO" in name:
+        off_y += 0.24
+    elif "Quadcóptero 2" in name:
+        off_y -= 0.24
+
+    return off_x, off_y
+
+
+
 def plot_frame(origin, orientation_rad, ax=None, axis_size=0.4, label=None, 
-               colors=('red', 'green'), text_offset=(0.0, 0.15)):
+               colors=('red', 'green'), text_offset=(0.0, 0.2), fontsize=8.5):
     """
     Plota um referencial 2D centrado em `origin` com orientação `orientation_rad`.
     Eixo X: Vermelho, Eixo Y: Verde.
@@ -63,5 +92,6 @@ def plot_frame(origin, orientation_rad, ax=None, axis_size=0.4, label=None,
     
     if label:
         ax.text(x0 + text_offset[0], y0 + text_offset[1], label, 
-                fontsize=9, fontweight='bold', ha='center', va='bottom', zorder=6,
+                fontsize=fontsize, fontweight='bold', ha='center', va='center', zorder=6,
                 bbox=dict(boxstyle='round,pad=0.25', facecolor='#FFFDD0', edgecolor='#888888', alpha=0.9))
+

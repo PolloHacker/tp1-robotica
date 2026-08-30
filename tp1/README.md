@@ -31,16 +31,26 @@ $$^R \theta_i = \theta_i - \theta_R$$
 
 ### 2. Execução do Script
 
-Para executar a solução da Questão 3 e gerar os gráficos:
+Para executar a solução com o **CoppeliaSim** aberto:
 
 ```bash
 cd tp1
-uv run python main.py
+
+# Questão 3 (Cena padrão)
+uv run python main.py --output images/questao3.png
+
+# Questão 4 (Com as respectivas cenas TP1-Cena-q4_p*.ttt abertas no CoppeliaSim)
+uv run python main.py --output images/questao4_p1.png
+uv run python main.py --output images/questao4_p2.png
+uv run python main.py --output images/questao4_p3.png
 ```
 
 O script:
+
 1. Conecta-se à cena do **CoppeliaSim** via **ZeroMQ Remote API** (`coppeliasim_zmqremoteapi_client`).
 2. Recupera as posições e orientações globais de todos os elementos e do robô.
 3. Computa analiticamente as matrizes de transformação homogêneas globais e locais $^R T_i$.
-4. Plota os referenciais de coordenadas (Eixo X em vermelho, Eixo Y em verde) e os vetores de posição relativa.
-5. Salva a figura gerada em `images/questao3.png`.
+4. Calcula limites dinâmicos com proporção 1:1 e resolve automaticamente sobreposições entre caixas de texto.
+5. Plota os referenciais de coordenadas (Eixo X em vermelho, Eixo Y em verde) e os vetores de posição relativa.
+6. Salva a figura gerada no caminho especificado em `--output`.
+
