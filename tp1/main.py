@@ -1,6 +1,6 @@
 import argparse
-import os
 import time
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -18,12 +18,220 @@ def get_global_pose(sim, handle):
     return pos[0], pos[1], ori[2]
 
 
+class HokuyoSensorSim:
+    """Leitor do sensor fastHokuyo usado pelo modelo PioneerP3DX."""
+
+    _angle_min = -120 * np.pi / 180
+    _angle_increment = (240 / 684) * np.pi / 180
+
+    def __init__(self, sim, base_path):
+        self.sim = sim
+        self.base = sim.getObject(base_path)
+        self.sensors = [
+            sim.getObject(f"{base_path}/sensor1"),
+            sim.getObject(f"{base_path}/sensor2"),
+        ]
+
+    def get_points(self):
+        """Retorna pontos [x, y, z] no referencial local do laser."""
+        points = []
+        angle = self._angle_min
+
+        for sensor in self.sensors:
+            _, _, packed = self.sim.readVisionSensor(sensor)
+            if not packed:
+                continue
+
+            # Cada vision sensor devolve os pontos no proprio referencial.
+            # O exemplo do Hokuyo primeiro os leva para o referencial do laser.
+            T_laser_sensor = matriz_sim_para_numpy(
+                self.sim.getObjectMatrix(sensor, self.base)
+            )
+            width, height = int(packed[0]), int(packed[1])
+            for j in range(height):
+                for k in range(width):
+                    index = 2 + 4 * (j * width + k)
+                    point = packed[index:index + 3]
+                    angle += self._angle_increment
+                    if len(point) == 3:
+                        points.append(transform_points([point], T_laser_sensor)[0])
+
+        return np.asarray(points, dtype=float).reshape((-1, 3))
+
+
+def transform_points(points, transform):
+    """Aplica uma transformacao homogenea 4x4 a pontos 3D."""
+    points = np.asarray(points, dtype=float).reshape((-1, 3))
+    if points.size == 0:
+        return np.empty((0, 3))
+
+    points_h = np.column_stack((points, np.ones(len(points))))
+    return (np.asarray(transform, dtype=float) @ points_h.T).T[:, :3]
+
+
+def transform_laser_points_to_world(points_laser, T_R_L, T_W_R):
+    """Aplica a cadeia laser -> robô -> mundo aos pontos do laser."""
+    points_laser = np.asarray(points_laser, dtype=float)
+    if points_laser.size == 0:
+        return np.empty((0, 2))
+
+    points_h = np.column_stack((points_laser[:, :3], np.ones(len(points_laser))))
+    points_world = (T_W_R @ T_R_L @ points_h.T).T
+    return points_world[:, :2]
+
+
+def calculate_global_plot_limits(points, margin=0.6):
+    """Calcula os limites 2D mantendo a extensao completa do mapa global."""
+    points = np.asarray(points, dtype=float).reshape((-1, 2))
+    if points.size == 0:
+        points = np.zeros((1, 2), dtype=float)
+
+    minimum = points.min(axis=0) - margin
+    maximum = points.max(axis=0) + margin
+    return (float(minimum[0]), float(maximum[0]),
+            float(minimum[1]), float(maximum[1]))
+
+
+def salvar_figura(output):
+    """Salva o PNG em ``tp1/images`` usando um arquivo já aberto."""
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with output_path.open("w+b") as output_file:
+        plt.savefig(output_file, format="png", dpi=200, bbox_inches="tight")
+
+    if output_path.stat().st_size == 0:
+        raise RuntimeError(f"Matplotlib criou uma imagem vazia: {output_path}")
+
+    return output_path
+
+
+def run_question_5(sim, output):
+    """Plota a leitura do laser no referencial global e salva a imagem."""
+    robot = sim.getObject("/PioneerP3DX")
+    laser = sim.getObject("/PioneerP3DX/fastHokuyo")
+
+    sensor = HokuyoSensorSim(sim, "/PioneerP3DX/fastHokuyo")
+    sim.startSimulation()
+    sim.step()
+
+    try:
+        # A pose é lida depois do primeiro passo para que as matrizes e os
+        # pontos correspondam ao mesmo estado atual da simulação.
+        # getObjectMatrix(objeto, referencial) retorna ^referencial T_objeto.
+        # Portanto: ^R T_L é laser -> robô e ^W T_R é robô -> mundo.
+        T_R_L_raw = sim.getObjectMatrix(laser, robot)
+        T_W_R_raw = sim.getObjectMatrix(robot, sim.handle_world)
+        T_R_L = matriz_sim_para_numpy(T_R_L_raw)
+        T_W_R = matriz_sim_para_numpy(T_W_R_raw)
+
+        points_laser = sensor.get_points()
+        max_sensor_range = 5.0
+        if len(points_laser):
+            detected = np.linalg.norm(points_laser, axis=1) < max_sensor_range - 0.1
+            points_laser = points_laser[detected]
+        points_world = transform_laser_points_to_world(
+            points_laser, T_R_L, T_W_R
+        )
+
+        robot_position = sim.getObjectPosition(robot, sim.handle_world)
+        robot_orientation = sim.getObjectOrientation(robot, sim.handle_world)
+        laser_position = sim.getObjectPosition(laser, sim.handle_world)
+
+        scene_specs = [
+            ("Bill", ["/Bill"]),
+            ("Cadeira", ["/diningChair"]),
+            ("Mesa", ["/customizableTable"]),
+            ("Planta 1", ["/indoorPlant", "/indoorPlant[0]"]),
+            ("Planta 2", ["/indoorPlant[1]"]),
+            ("Quadcopter 1", ["/Quadcopter[0]", "/Quadcopter"]),
+            ("Quadcopter 2", ["/Quadcopter[1]"]),
+            ("Robo NAO", ["/NAO"]),
+        ]
+        scene_objects = []
+        for name, paths in scene_specs:
+            for path in paths:
+                try:
+                    handle = sim.getObject(path)
+                    position = sim.getObjectPosition(handle, sim.handle_world)
+                    scene_objects.append((name, position))
+                    break
+                except Exception:
+                    continue
+
+        print("\nQuestão 5 - matrizes de transformação")
+        print("^R T_L (laser -> robô):\n", np.round(T_R_L, 4))
+        print("^W T_R (robô -> mundo):\n", np.round(T_W_R, 4))
+        print(f"Pose global do robô: {robot_position[:2]}, "
+              f"theta={robot_orientation[2]:+.4f} rad")
+        print(f"Pontos válidos: {len(points_world)}")
+
+        fig, ax = plt.subplots(figsize=(7, 7), dpi=120)
+        scene_xy = [[0.0, 0.0], robot_position[:2], laser_position[:2]]
+        scene_xy.extend(position[:2] for _, position in scene_objects)
+        scene_xy.extend(points_world.tolist())
+        x_min, x_max, y_min, y_max = calculate_global_plot_limits(scene_xy)
+
+        if len(points_world):
+            ax.scatter(points_world[:, 0], points_world[:, 1], s=5,
+                       color="darkorange", label="Leitura do laser")
+        ax.scatter(*robot_position[:2], marker="s", s=100, color="blue",
+                   label="Robô")
+        ax.scatter(*laser_position[:2], marker="^", s=70, color="black",
+                   label="Laser")
+        utils.plot_frame(robot_position, robot_orientation[2], ax=ax,
+                         axis_size=0.45, label="{R}", fontsize=9)
+        ax.set_title("Questão 5 — leitura do laser no mapa global")
+        ax.set_xlabel("X mundo [m]")
+        ax.set_ylabel("Y mundo [m]")
+        ax.grid(True, linestyle=":")
+        ax.set_aspect("equal")
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        ax.legend()
+        # O arquivo aberto explicitamente evita a falha do Pillow no Windows.
+        output_path = normalizar_caminho_saida(output)
+        salvar_figura(output_path)
+        print(f"[INFO] Gravando gráfico em: {output_path}")
+        plt.close(fig)
+        print(f"[SUCESSO] Gráfico da questão 5 salvo em '{output_path}'")
+    finally:
+        sim.stopSimulation()
+
+
+def matriz_sim_para_numpy(matrix):
+    """Converte a matriz 3x4 da RemoteAPI em uma matriz homogênea 4x4."""
+    matrix = np.asarray(matrix, dtype=float).reshape(3, 4)
+    result = np.eye(4)
+    result[:3, :4] = matrix
+    return result
+
+
+def normalizar_caminho_saida(output):
+    """Retorna somente um arquivo dentro da pasta ``tp1/images``."""
+    output = str(output)
+    while r"\_" in output:
+        output = output.replace(r"\_", "_")
+
+    filename = Path(output).name
+    if not filename or filename in {".", ".."}:
+        raise ValueError("O arquivo de saída precisa ter um nome válido")
+
+    images_dir = Path(__file__).resolve().parent / "images"
+    return (images_dir / filename).resolve()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Transformações Homogêneas - TP1 Robótica Móvel")
     parser.add_argument("--output", "-o", default="images/questao3.png", help="Caminho do arquivo de saída da imagem")
+    parser.add_argument("--question", choices=("3", "5"), default="3",
+                        help="Questão a executar (padrão: 3)")
     args = parser.parse_args()
 
-    os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
+    print(f"[INFO] Script em execução: {Path(__file__).resolve()}")
+
+    output_path = normalizar_caminho_saida(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Conexão com o CoppeliaSim via ZeroMQ Remote API
     client = RemoteAPIClient()
@@ -33,6 +241,10 @@ def main():
     if initial_sim_state != 0:
         sim.stopSimulation()
         time.sleep(1)
+
+    if args.question == "5":
+        run_question_5(sim, output_path)
+        return
 
     # Lista de elementos a serem mapeados na cena
     object_specs = [
@@ -167,9 +379,9 @@ def main():
     fig.legend(handles=legend_elements, loc='lower center', ncol=3, fontsize=10.5, frameon=True, bbox_to_anchor=(0.5, 0.01))
 
     plt.subplots_adjust(bottom=0.14)
-    plt.savefig(args.output, dpi=200, bbox_inches='tight')
+    salvar_figura(output_path)
     plt.close(fig)
-    print(f"\n[SUCESSO] Gráfico salvo em '{args.output}'")
+    print(f"\n[SUCESSO] Gráfico salvo em '{output_path}'")
 
     sim.stopSimulation()
 
