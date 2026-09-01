@@ -1,76 +1,36 @@
 # Trabalho Prático 1 — Ferramentas e Transformações
 
-**Disciplina:** Robótica Móvel (2º Semestre de 2026)  
-**Departamento:** Departamento de Ciência da Computação — DCC / ICEx / UFMG  
+**Disciplina:** Robótica Móvel  
 **Professor:** Prof. Douglas G. Macharet  
 
 ---
 
-## 1. Identificação do Aluno
-
-- **Aluno:** PedLuiz <!-- Preencha com o nome completo da dupla/aluno -->
-- **Matrícula:** <!-- Preencha com o número de matrícula -->
+- Isaac Reyes Alves de Abreu - 2025050342
+- Pedro Luiz Silva - 2024006129
 
 ---
 
-## 2. Visão Geral e Arquitetura do Sistema
+## Questão 1
 
-O objetivo deste trabalho prático é consolidar os fundamentos teóricos e práticos de **descrição espacial**, **transformações homogêneas em $SE(2) / SE(3)$**, **sensoriamento laser** e **navegação com mapeamento global** utilizando o simulador **CoppeliaSim** integrado à linguagem **Python 3** através da **ZeroMQ Remote API**.
-
-### Diagrama de Comunicação e Fluxo de Dados
-
-```mermaid
-flowchart LR
-    subgraph CoppeliaSim["Simulador CoppeliaSim"]
-        Scene["Cena 3D (Cenário, Robô, Elementos)"]
-        ZMQ["ZeroMQ Remote API Server"]
-        LaserSensor["Sensor fastHokuyo (sensor1, sensor2)"]
-        Actuators["Motores (leftMotor, rightMotor)"]
-        Scene --> LaserSensor
-        Scene --> ZMQ
-    end
-
-    subgraph PythonClient["Aplicação Python (uv / Python 3)"]
-        RemoteAPI["coppeliasim_zmqremoteapi_client"]
-        Utils["Módulo utils.py (Transformações SE2/SE3)"]
-        Main["Módulo main.py (Controle, Projeção e Plot)"]
-        
-        RemoteAPI <-->|RPC / Sockets ZeroMQ| ZMQ
-        Main --> Utils
-        Main --> RemoteAPI
-    end
-
-    subgraph Outputs["Artefatos Gerados"]
-        ImgQ3["questao3.png"]
-        ImgQ4["questao4_p{1,2,3}.png"]
-        ImgQ5["questao5_p{1,2,3}_global.png"]
-        ImgQ6["questao6_navegacao_global.png"]
-    end
-
-    Main --> Outputs
-```
-
----
-
-## 3. Questão 1 — Cenário e Elementos Adicionados
-
-A partir da cena inicial do CoppeliaSim, foram inseridos e distribuídos no ambiente:
-1. **Robô Móvel Diferencial:** Pioneer 3DX (`/PioneerP3DX`).
+Na cena final, temos, distribuídos no ambiente, os seguintes elementos:
+1. **Robô Móvel:** Pioneer 3DX.
 2. **Elementos Diversos:**
-   - **Pessoas/Humanoides:** Humanoide Bill (`/Bill`) e Robô NAO (`/NAO`).
-   - **Mobiliário:** Cadeira de jantar (`/diningChair`) e Mesa personalizável (`/customizableTable`).
-   - **Vegetação/Decoração:** Duas Plantas internas (`/indoorPlant[0]` e `/indoorPlant[1]`).
-   - **Veículos Aéreos:** Dois Quadcópteros (`/Quadcopter[0]` e `/Quadcopter[1]`).
+   - **Pessoas/Humanoides:** Bill e Robô NAO.
+   - **Mobiliário:** Mesa e Cadeira de jantar.
+   - **Vegetação/Decoração:** Dois vasos de planta.
+   - **Veículos Aéreos:** Dois Quadcópteros.
 
-Todos os itens foram distribuídos espacialmente cobrindo diferentes quadrantes do plano $XY$ para permitir a validação dos algoritmos de transformação espacial.
+!["Cena final"](images/questao1.png)
 
 ---
 
-## 4. Questão 2 — Sistemas de Coordenadas e Grafo de Transformações
+## Questão 2
 
 Cada entidade na cena possui seu próprio sistema de coordenadas ortonormal afixado, seguindo a convenção de mão direita (com eixo $Z$ perpendicular ao plano de locomoção, $X$ apontando para a frente do elemento e $Y$ para a esquerda).
 
-### Grafo de Relações Espaciais
+![](images/questao2-reference.png)
+
+### Árvore de relacionamentos
 
 ```mermaid
 graph TD
@@ -89,28 +49,29 @@ graph TD
     O7["{Quadcóptero 2}"]
     O8["{Robô NAO}"]
 
-    W -->|"^W T_R"| R
-    W -->|"^W T_Bill"| O1
-    W -->|"^W T_Cadeira"| O2
-    W -->|"^W T_Mesa"| O3
-    W -->|"^W T_Planta1"| O4
-    W -->|"^W T_Planta2"| O5
-    W -->|"^W T_Quad1"| O6
-    W -->|"^W T_Quad2"| O7
-    W -->|"^W T_NAO"| O8
+    W -->|"$$^W T_R$$"| R
+    W -->|"$$^W T_{Bill}$$"| O1
+    W -->|"$$^W T_{Cadeira}$$"| O2
+    W -->|"$$^W T_{Mesa}$$"| O3
+    W -->|"$$^W T_{Planta1}$$"| O4
+    W -->|"$$^W T_{Planta2}$$"| O5
+    W -->|"$$^W T_{Quad1}$$"| O6
+    W -->|"$$^W T_{Quad2}$$"| O7
+    W -->|"$$^W T_{NAO}$$"| O8
 
-    R -->|"^R T_L"| L
-    L -->|"^L T_S1"| S1
-    L -->|"^L T_S2"| S2
+    R -->|"$$^R T_L$$"| L
+    L -->|"$$^L T_{S1}$$"| S1
+    L -->|"$$^L T_{S2}$$"| S2
 
-    R -.->|"^R T_i = (^W T_R)⁻¹ · ^W T_i"| O1
-    R -.->|"^R T_i"| O2
-    R -.->|"^R T_i"| O3
-    R -.->|"^R T_i"| O4
-    R -.->|"^R T_i"| O5
-    R -.->|"^R T_i"| O6
-    R -.->|"^R T_i"| O7
-    R -.->|"^R T_i"| O8
+    R -.->|"$$^R T_i = (^W T_R)^{-1} \cdot ^W T_i$$"| O1
+    R -.->|"$$^R T_i$$"| O2
+    R -.->|"$$^R T_i$$"| O3
+    R -.->|"$$^R T_i$$"| O4
+    R -.->|"$$^R T_i$$"| O5
+    R -.->|"$$^R T_i$$"| O6
+    R -.->|"$$^R T_i$$"| O7
+    R -.->|"$$^R T_i$$"| O8
+
 ```
 
 - **Transformações Primárias (Globais):** Obtidas diretamente da cena via API ZeroMQ em relação a $\{W\}$.
@@ -119,11 +80,10 @@ graph TD
 
 ---
 
-## 5. Questão 3 — Matrizes de Transformação Homogênea no Referencial Local
+## Questão 3
 
-### Modelagem Matemática
-
-A configuração de qualquer corpo $k$ no plano global $\{W\}$ é parametrizada por $q_k = [x_k, y_k, \theta_k]^T$. A matriz de transformação homogênea $4 \times 4$ associada (representação em $SE(2)$ expandida para $SE(3)$) é:
+Podemos descrever qualquer corpo $k$ no plano global $\{W\}$ com o vetor $q_k = [x_k, y_k, \theta_k]^T$.   
+A matriz de transformação homogênea $4 \times 4$ associada é:
 
 $$^W T_k = \begin{bmatrix} 
 \cos\theta_k & -\sin\theta_k & 0 & x_k \\ 
@@ -132,7 +92,7 @@ $$^W T_k = \begin{bmatrix}
 0 & 0 & 0 & 1 
 \end{bmatrix}$$
 
-Para uma transformação homogênea rígida $T = \begin{bmatrix} R & p \\ \mathbf{0}^T & 1 \end{bmatrix}$, sua inversa exata é calculada analiticamente sem inversão matricial numérica custosa:
+Para uma transformação homogênea $T = \begin{bmatrix} R & p \\ \mathbf{0}^T & 1 \end{bmatrix}$, sua inversa exata é:
 
 $$(^W T_R)^{-1} = {}^R T_W = \begin{bmatrix} R_R^T & -R_R^T p_R \\ \mathbf{0}^T & 1 \end{bmatrix} = \begin{bmatrix} 
 \cos\theta_R & \sin\theta_R & 0 & -(x_R\cos\theta_R + y_R\sin\theta_R) \\ 
@@ -141,7 +101,7 @@ $$(^W T_R)^{-1} = {}^R T_W = \begin{bmatrix} R_R^T & -R_R^T p_R \\ \mathbf{0}^T 
 0 & 0 & 0 & 1 
 \end{bmatrix}$$
 
-A posição e orientação do elemento $i$ expressas no referencial do robô $\{R\}$ resultam do produto:
+A posição e orientação de um elemento $i$ qualquer, expressas no referencial do robô $\{R\}$, resultam do produto:
 
 $$^R T_i = {}^R T_W \cdot {}^W T_i = (^W T_R)^{-1} \cdot {}^W T_i$$
 
@@ -150,7 +110,9 @@ Em coordenadas escalares:
 - $^R y_i = -(x_i - x_R)\sin\theta_R + (y_i - y_R)\cos\theta_R$
 - $^R \theta_i = \theta_i - \theta_R$
 
-### Resultados Numéricos Obtidos na Cena Padrão
+Com essas fórmulas, podemos achar a posição de todos os elementos da cena (fornecidos pelo simulador), em relação ao robô.
+
+### Posição dos elementos em relação ao robô
 
 Configuração do Robô: $q_R = [0.4250\text{ m},\, 0.6250\text{ m},\, 0.0000\text{ rad} \ (0.00^\circ)]$
 
@@ -165,77 +127,72 @@ Configuração do Robô: $q_R = [0.4250\text{ m},\, 0.6250\text{ m},\, 0.0000\te
 | **Quadcóptero 2** | $(-2.10\text{ m}, +0.20\text{ m}, 0.0^\circ)$ | $(-2.52\text{ m}, -0.42\text{ m}, 0.0^\circ)$ |
 | **Robô NAO** | $(-1.72\text{ m}, +0.02\text{ m}, 0.0^\circ)$ | $(-2.14\text{ m}, -0.60\text{ m}, 0.0^\circ)$ |
 
-### Gráfico de Referenciais e Vetores Relativos
-
-![Questão 3 - Referenciais e Relacionamentos](images/questao3.png)
+![Referenciais e Relacionamentos](images/questao3.png)
 
 *Figura 1: Referencial Global $\{W\}$ (à esquerda) e Referencial Local $\{R\}$ (à direita). Eixo X em vermelho, Eixo Y em verde e vetores de translação relativa $^R p_i$ em linha tracejada roxa.*
 
 ---
 
-## 6. Questão 4 — Validação em Múltiplas Configurações do Robô
+## 6. Questão 4
 
-Para comprovar a generalidade da formulação para qualquer translação e rotação do robô, foram avaliadas três configurações distintas variando a pose $q_R = [x, y, \theta]$:
+Foram avaliadas três configurações distintas variando a pose $q_R = [x, y, \theta]$:
 
-### Caso 1: Posição Central com Rotação Invertida ($180^\circ$ — De Costas)
+### Cena 1:
 - Cena: `scenes/TP1-Cena-q4_p1.ttt`
 - Pose do robô: $q_R \approx [-0.32\text{ m},\, -0.60\text{ m},\, 180^\circ]$
-- **Comportamento observado:** Elementos que estavam à direita do robô no mundo passam a estar à esquerda no referencial $\{R\}$ devido à rotação de $\pi\text{ rad}$.
 
-![Questão 4 - Posição 1](images/questao4_p1.png)
+| Plots | Cena |
+| :---: | :---: |
+| ![Questão 4 - Posição 1](images/questao4_p1.png) | ![](images/questao4_p1_cena.png) |
 
 ---
 
-### Caso 2: Posição Superior com Orientação Angular Inclinada ($\approx +30^\circ$)
+### Cena 2
 - Cena: `scenes/TP1-Cena-q4_p2.ttt`
 - Pose do robô: $q_R \approx [-2.20\text{ m},\, +2.15\text{ m},\, +30^\circ]$
-- **Comportamento observado:** Todo o conjunto de elementos sofre translação e rotação em bloco para o quadrante inferior de $\{R\}$, mantendo as distâncias euclidianas relativas estritamente invariantes.
 
-![Questão 4 - Posição 2](images/questao4_p2.png)
+| Plots | Cena |
+| :---: | :---: |
+| ![Questão 4 - Posição 2](images/questao4_p2.png) | ![](images/questao4_p2_cena.png) |
 
 ---
 
-### Caso 3: Posição Inferior com Orientação Inclinada para Baixo ($\approx -120^\circ$)
+### Cena 3
 - Cena: `scenes/TP1-Cena-q4_p3.ttt`
 - Pose do robô: $q_R \approx [-0.25\text{ m},\, -0.98\text{ m},\, -120^\circ]$
-- **Comportamento observado:** O eixo frontal do robô aponta para o canto inferior direito no mundo, projetando os objetos à frente e atrás de forma coerente no plano $\{R\}$.
 
-![Questão 4 - Posição 3](images/questao4_p3.png)
+| Plots | Cena |
+| :---: | :---: |
+| ![Questão 4 - Posição 3](images/questao4_p3.png) | ![](images/questao4_p3_cena.png) |
 
 ---
 
-## 7. Questão 5 — Projeção Global das Leituras do Laser Hokuyo
+## Questão 5
 
-O sensor Hokuyo (`/PioneerP3DX/fastHokuyo`) é composto internamente por dois sensores de visão (`sensor1` e `sensor2`) que cobrem uma abertura angular de $240^\circ$.
+Na simulação, o sensor Hokuyo é composto internamente por dois sensores de visão (`sensor1` e `sensor2`) que cobrem uma abertura angular de $240^\circ$.
 
-### Cadeia Cinemática de Percepção
-
-Cada leitura do sensor retorna pontos $^L p = [^L x, ^L y, ^L z]^T$ no referencial local do laser. Para representá-los no referencial inercial do mundo $\{W\}$, aplica-se a composição de transformações:
+Cada leitura do sensor retorna pontos $^L p = [^L x, ^L y, ^L z]^T$ no referencial local do laser. Para representá-los no referencial inercial do mundo $\{W\}$, aplicamos a composição de transformações:
 
 $$^W \tilde{p} = {}^W T_R \cdot {}^R T_L \cdot {}^L \tilde{p}$$
 
 Onde:
 - $^L \tilde{p} = [^L x, ^L y, ^L z, 1]^T$ é a coordenada homogênea do ponto no laser;
-- $^R T_L$ é a pose estática do laser em relação ao chassi do robô;
+- $^R T_L$ é a pose estática do laser em relação ao robô;
 - $^W T_R$ é a pose instantânea do robô no mundo;
 - $^W \tilde{p} = [^W x, ^W y, ^W z, 1]^T$ é o ponto transformado no referencial global.
 
-### Resultados da Projeção em Três Poses do Robô
-
-As cenas `TP1-Cena-q5_p1.ttt`, `TP1-Cena-q5_p2.ttt` e `TP1-Cena-q5_p3.ttt` foram avaliadas:
+### Resultados
 
 | Posição 1 (`q5_p1`) | Posição 2 (`q5_p2`) | Posição 3 (`q5_p3`) |
 | :---: | :---: | :---: |
 | ![Q5 P1](images/questao5_p1_global.png) | ![Q5 P2](images/questao5_p2_global.png) | ![Q5 P3](images/questao5_p3_global.png) |
 | *Pose: $(+0.18\text{ m}, +0.65\text{ m}, 0.0^\circ)$* | *Pose: $(-0.55\text{ m}, -1.95\text{ m}, +90.0^\circ)$* | *Pose: $(-1.90\text{ m}, +1.90\text{ m}, -45.0^\circ)$* |
 
-**Análise:** Em todas as poses, as nuvens de pontos em laranja alinham-se precisamente com as posições reais dos obstáculos no ambiente global (pernas da mesa, troncos das plantas, contorno dos robôs e cadeiras), comprovando a exatidão das matrizes $^R T_L$ e $^W T_R$.
-
 ---
 
-## 8. Questão 6 — Navegação Reativa e Mapeamento Global Integrado
+## Questão 6
 
-### Algoritmo de Desvio de Obstáculos e Cinemática Diferencial
+### Desvio de obstáculos
 
 A navegação autônoma opera em malha fechada dividindo a varredura do laser em três setores angulares:
 1. **Setor Frontal** ($\text{índice } N/2$): Detecta proximidade de colisão direta.
@@ -243,20 +200,20 @@ A navegação autônoma opera em malha fechada dividindo a varredura do laser em
 3. **Setor Esquerdo** ($\text{índice } 3N/4$): Avalia espaço livre à esquerda.
 
 A máquina de estados reativa define a velocidade linear $v$ e a velocidade angular $\omega$:
-- Se distância frontal $> 2.0\text{ m} \implies v = 0.5\text{ m/s},\ \omega = 0\text{ rad/s}$ (Avançar);
-- Se obstáculo à frente e direita livre $\implies v = 0.0\text{ m/s},\ \omega = -30^\circ/\text{s}$ (Girar no próprio eixo à direita);
-- Se obstáculo à frente e esquerda livre $\implies v = 0.0\text{ m/s},\ \omega = +30^\circ/\text{s}$ (Girar no próprio eixo à esquerda);
+- Se distância frontal $> 2.0\text{ m} \implies v = 0.5\text{ m/s},\ \omega = 0\text{ rad/s}$ (Ir pra frente);
+- Se obstáculo à frente e direita livre $\implies v = 0.0\text{ m/s},\ \omega = -30^\circ/\text{s}$ (Girar à direita);
+- Se obstáculo à frente e esquerda livre $\implies v = 0.0\text{ m/s},\ \omega = +30^\circ/\text{s}$ (Girar à esquerda);
 - Caso contrário $\implies v = 0.0\text{ m/s},\ \omega = 0\text{ rad/s}$ (Parar).
 
-As velocidades angulares das rodas esquerda ($\omega_L$) e direita ($\omega_R$) do Pioneer 3DX são computadas pela cinemática direta:
+As velocidades angulares das rodas esquerda ($\omega_L$) e direita ($\omega_R$) do Pioneer 3DX são calculadas pela cinemática direta:
 
 $$\omega_L = \frac{v - \frac{\omega \cdot d}{2}}{r}, \qquad \omega_R = \frac{v + \frac{\omega \cdot d}{2}}{r}$$
 
-onde $d = 0.381\text{ m}$ (bitola entre rodas) e $r = 0.0975\text{ m}$ (raio das rodas).
+onde $d = 0.381\text{ m}$ é a distância entre as rodas e $r = 0.0975\text{ m}$ é o raio das rodas.
 
-### Acumulação Incremental e Gráfico Consolidado
+### Gráfico de obstáculos
 
-Durante o deslocamento contínuo de 40 segundos, a pose $q_R(t)$ é registrada e todas as leituras válidas do laser são transformadas para $\{W\}$ e acumuladas em tempo real.
+Durante os 40s de simulação, a pose $q_R(t)$ foi registrada e todas as leituras válidas do laser foram transformadas para $\{W\}$ e acumuladas em tempo real.
 
 ![Questão 6 - Trajetória e Mapeamento Global](images/questao6_navegacao_global.png)
 
@@ -264,26 +221,7 @@ Durante o deslocamento contínuo de 40 segundos, a pose $q_R(t)$ é registrada e
 
 ---
 
-## 9. Detalhes de Implementação e Estrutura de Código
-
-O código-fonte foi estruturado de forma modular e limpa:
-
-- **[`utils.py`](utils.py):**
-  - `homogeneousTransformationMatrix(x, y, theta)`: Constrói matrizes homogêneas $4 \times 4$ em $SE(2) / SE(3)$.
-  - `inverseHomogeneousMatrix(T)`: Inversão analítica $\begin{bmatrix} R^T & -R^T p \\ \mathbf{0}^T & 1 \end{bmatrix}$.
-  - `transformToRobotFrame(T_world_robot, T_world_object)`: Composição $^R T_{obj} = (^W T_R)^{-1} \cdot {}^W T_{obj}$.
-  - `plot_frame(origin, orientation_rad, ...)`: Renderização visual dos eixos de coordenadas ($X=$ Vermelho, $Y=$ Verde).
-  - `get_label_offset(...)`: Algoritmo de posicionamento dinâmico de rótulos evitando sobreposição de texto nos gráficos.
-
-- **[`main.py`](main.py):**
-  - `HokuyoSensorSim`: Classe wrapper que encapsula a leitura dos submódulos `sensor1` e `sensor2` do laser Hokuyo.
-  - `transform_laser_points_to_world(points_laser, T_R_L, T_W_R)`: Transformação em lote das coordenadas do sensor para o mundo.
-  - `run_navigation(sim, output, duration)`: Laço de controle cinemático diferencial com acumulação incremental do mapa global.
-  - `main()`: Interface de linha de comando (`argparse`) unificada para execução das Questões 3, 4, 5 e 6.
-
----
-
-## 10. Instruções de Execução
+## Como rodar
 
 ### Pré-requisitos
 - Python 3.10+ (ou gerenciador `uv`)
@@ -291,27 +229,64 @@ O código-fonte foi estruturado de forma modular e limpa:
 
 ### Comandos de Execução
 
-Todos os comandos devem ser executados a partir do diretório `tp1`:
+Todos os comandos devem ser executados a partir do diretório raiz:
+
+<details open>
+<summary>
+    <b>Usando UV</b>
+</summary>
 
 ```bash
 cd tp1
 
-# 1. Questão 3 — Referenciais e Transformações na Cena Padrão (TP1-Cena.ttt)
+uv sync
+
+# 1. Questão 3
 uv run python main.py --question 3 --output images/questao3.png
 
-# 2. Questão 4 — Validação em Diferentes Poses (Abrir cada cena q4_p*.ttt correspondente)
+# 2. Questão 4
 uv run python main.py --question 3 --output images/questao4_p1.png
 uv run python main.py --question 3 --output images/questao4_p2.png
 uv run python main.py --question 3 --output images/questao4_p3.png
 
-# 3. Questão 5 — Laser no Referencial Global (Abrir cada cena q5_p*.ttt correspondente)
+# 3. Questão 5
 uv run python main.py --question 5 --output images/questao5_p1_global.png
 uv run python main.py --question 5 --output images/questao5_p2_global.png
 uv run python main.py --question 5 --output images/questao5_p3_global.png
 
-# 4. Questão 6 — Navegação Autônoma e Mapeamento Incremental (40 s de simulação)
+# 4. Questão 6
 uv run python main.py --question 6 --duration 40 --output images/questao6_navegacao_global.png
 ```
+
+</details>
+
+<details open>
+<summary>
+    <b>Usando python normal</b>
+</summary>
+
+```bash
+cd tp1
+
+
+# 1. Questão 3
+python main.py --question 3 --output images/questao3.png
+
+# 2. Questão 4
+python main.py --question 3 --output images/questao4_p1.png
+python main.py --question 3 --output images/questao4_p2.png
+python main.py --question 3 --output images/questao4_p3.png
+
+# 3. Questão 5
+python main.py --question 5 --output images/questao5_p1_global.png
+python main.py --question 5 --output images/questao5_p2_global.png
+python main.py --question 5 --output images/questao5_p3_global.png
+
+# 4. Questão 6
+python main.py --question 6 --duration 40 --output images/questao6_navegacao_global.png
+```
+
+</details>
 
 ---
 
@@ -331,7 +306,5 @@ uv run python main.py --question 6 --duration 40 --output images/questao6_navega
 
 ## 12. Referências Bibliográficas
 
-1. **Siegwart, R., Nourbakhsh, I. R., & Scaramuzza, D.** *Introduction to Autonomous Mobile Robots*. MIT Press, 2nd Edition, 2011.
-2. **Craig, J. J.** *Introduction to Robotics: Mechanics and Control*. Pearson, 3rd Edition, 2005.
-3. **Coppelia Robotics.** *CoppeliaSim User Manual & ZeroMQ Remote API Documentation*. Disponível em: <https://manual.coppeliarobotics.com/>.
-4. **Macharet, D. G.** *Notas de Aula e Códigos de Exemplo da Disciplina de Robótica Móvel*. DCC/UFMG, 2026.
+1. **Macharet, D. G.** *Notas de Aula e Códigos de Exemplo da Disciplina de Robótica Móvel*. DCC/UFMG, 2026.
+2. **Coppelia Robotics.** *CoppeliaSim User Manual & ZeroMQ Remote API Documentation*. Disponível em: <https://manual.coppeliarobotics.com/>.
