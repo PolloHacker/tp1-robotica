@@ -202,9 +202,6 @@ def run_navigation(sim, output, duration=DEFAULT_NAVIGATION_DURATION):
 
     try:
         start_simulation(sim)
-        # A cena aberta pode bloquear em sim.step() depois do primeiro passo.
-        # A simulação contínua permite a mesma amostragem incremental sem
-        # depender do modo stepping do servidor.
         time.sleep(0.1)
 
         while True:
