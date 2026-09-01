@@ -13,6 +13,7 @@
 ## Questão 1
 
 Na cena final, temos, distribuídos no ambiente, os seguintes elementos:
+
 1. **Robô Móvel:** Pioneer 3DX.
 2. **Elementos Diversos:**
    - **Pessoas/Humanoides:** Bill e Robô NAO.
@@ -82,23 +83,23 @@ graph TD
 
 ## Questão 3
 
-Podemos descrever qualquer corpo $k$ no plano global $\{W\}$ com o vetor $q_k = [x_k, y_k, \theta_k]^T$.   
+Podemos descrever qualquer corpo $k$ no plano global $\{W\}$ com o vetor $q_k = [x_k, y_k, \theta_k]^T$.
 A matriz de transformação homogênea $4 \times 4$ associada é:
 
-$$^W T_k = \begin{bmatrix} 
-\cos\theta_k & -\sin\theta_k & 0 & x_k \\ 
-\sin\theta_k & \cos\theta_k & 0 & y_k \\ 
-0 & 0 & 1 & 0 \\ 
-0 & 0 & 0 & 1 
+$$^W T_k = \begin{bmatrix}
+\cos\theta_k & -\sin\theta_k & 0 & x_k \\
+\sin\theta_k & \cos\theta_k & 0 & y_k \\
+0 & 0 & 1 & 0 \\
+0 & 0 & 0 & 1
 \end{bmatrix}$$
 
 Para uma transformação homogênea $T = \begin{bmatrix} R & p \\ \mathbf{0}^T & 1 \end{bmatrix}$, sua inversa exata é:
 
-$$(^W T_R)^{-1} = {}^R T_W = \begin{bmatrix} R_R^T & -R_R^T p_R \\ \mathbf{0}^T & 1 \end{bmatrix} = \begin{bmatrix} 
-\cos\theta_R & \sin\theta_R & 0 & -(x_R\cos\theta_R + y_R\sin\theta_R) \\ 
--\sin\theta_R & \cos\theta_R & 0 & x_R\sin\theta_R - y_R\cos\theta_R \\ 
-0 & 0 & 1 & 0 \\ 
-0 & 0 & 0 & 1 
+$$(^W T_R)^{-1} = {}^R T_W = \begin{bmatrix} R_R^T & -R_R^T p_R \\ \mathbf{0}^T & 1 \end{bmatrix} = \begin{bmatrix}
+\cos\theta_R & \sin\theta_R & 0 & -(x_R\cos\theta_R + y_R\sin\theta_R) \\
+-\sin\theta_R & \cos\theta_R & 0 & x_R\sin\theta_R - y_R\cos\theta_R \\
+0 & 0 & 1 & 0 \\
+0 & 0 & 0 & 1
 \end{bmatrix}$$
 
 A posição e orientação de um elemento $i$ qualquer, expressas no referencial do robô $\{R\}$, resultam do produto:
@@ -267,7 +268,6 @@ uv run python main.py --question 6 --duration 40 --output images/questao6_navega
 
 ```bash
 cd tp1
-
 
 # 1. Questão 3
 python main.py --question 3 --output images/questao3.png
