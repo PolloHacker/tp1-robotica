@@ -9,6 +9,9 @@ from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 import utils
 
 
+DEFAULT_NAVIGATION_DURATION = 40.0
+
+
 def get_global_pose(sim, handle):
     """
     Recupera a pose global 2D (x, y, theta) de um objeto na cena via ZeroMQ API.
@@ -35,10 +38,12 @@ class HokuyoSensorSim:
     def get_points(self):
         """Retorna pontos [x, y, z] no referencial local do laser."""
         points = []
-        angle = self._angle_min
 
         for sensor in self.sensors:
-            _, _, packed = self.sim.readVisionSensor(sensor)
+            reading = self.sim.readVisionSensor(sensor)
+            if not isinstance(reading, (tuple, list)) or len(reading) < 3:
+                continue
+            _, _, packed = reading
             if not packed:
                 continue
 
@@ -48,15 +53,15 @@ class HokuyoSensorSim:
                 self.sim.getObjectMatrix(sensor, self.base)
             )
             width, height = int(packed[0]), int(packed[1])
-            for j in range(height):
-                for k in range(width):
-                    index = 2 + 4 * (j * width + k)
-                    point = packed[index:index + 3]
-                    angle += self._angle_increment
-                    if len(point) == 3:
-                        points.append(transform_points([point], T_laser_sensor)[0])
+            point_count = width * height
+            packed_points = np.asarray(
+                packed[2:2 + 4 * point_count], dtype=float
+            ).reshape((-1, 4))[:, :3]
+            points.append(transform_points(packed_points, T_laser_sensor))
 
-        return np.asarray(points, dtype=float).reshape((-1, 3))
+        if not points:
+            return np.empty((0, 3))
+        return np.vstack(points)
 
 
 def transform_points(points, transform):
@@ -90,6 +95,177 @@ def calculate_global_plot_limits(points, margin=0.6):
     maximum = points.max(axis=0) + margin
     return (float(minimum[0]), float(maximum[0]),
             float(minimum[1]), float(maximum[1]))
+
+
+def choose_navigation_command(ranges, clearance=2.0):
+    """Escolhe o comando basico de desvio usado no exemplo da aula."""
+    ranges = np.asarray(ranges, dtype=float).reshape(-1)
+    if ranges.size == 0:
+        return 0.0, 0.0
+
+    frente = ranges.size // 2
+    lado_direito = ranges.size * 1 // 4
+    lado_esquerdo = ranges.size * 3 // 4
+
+    if ranges[frente] > clearance:
+        return 0.5, 0.0
+    if ranges[lado_direito] > clearance:
+        return 0.0, -np.deg2rad(30)
+    if ranges[lado_esquerdo] > clearance:
+        return 0.0, np.deg2rad(30)
+    return 0.0, 0.0
+
+
+def resume_simulation_if_paused(sim):
+    """Retoma uma cena que entrou em pausa durante a execução."""
+    paused_state = getattr(sim, "simulation_paused", 8)
+    if sim.getSimulationState() == paused_state:
+        sim.startSimulation()
+        return True
+    return False
+
+
+def start_simulation(sim, settle_time=0.1):
+    """Inicia a cena e retoma o estado pausado configurado no CoppeliaSim."""
+    sim.startSimulation()
+    if settle_time:
+        time.sleep(settle_time)
+
+    if resume_simulation_if_paused(sim):
+        if settle_time:
+            time.sleep(settle_time)
+
+
+def plot_navigation_history(robot_path, laser_points_world, output):
+    """Salva em uma figura a trajetória e todas as leituras globais do laser."""
+    robot_path = np.asarray(robot_path, dtype=float)
+    robot_path = (robot_path.reshape((-1, 2)) if robot_path.size
+                  else np.empty((0, 2)))
+    laser_points_world = np.asarray(laser_points_world, dtype=float)
+    laser_points_world = (laser_points_world.reshape((-1, 2))
+                          if laser_points_world.size else np.empty((0, 2)))
+
+    plot_points = []
+    if len(robot_path):
+        plot_points.append(robot_path)
+    if len(laser_points_world):
+        plot_points.append(laser_points_world)
+    all_points = np.vstack(plot_points) if plot_points else np.zeros((1, 2))
+    x_min, x_max, y_min, y_max = calculate_global_plot_limits(all_points)
+
+    fig, ax = plt.subplots(figsize=(8, 8), dpi=120)
+    if len(laser_points_world):
+        ax.scatter(laser_points_world[:, 0], laser_points_world[:, 1],
+                   s=4, color="darkorange", alpha=0.35, rasterized=True,
+                   label="Leituras acumuladas do laser")
+    if len(robot_path):
+        ax.plot(robot_path[:, 0], robot_path[:, 1], "--", color="royalblue",
+                linewidth=1.5, label="Trajetória do robô")
+        ax.scatter(*robot_path[0], marker="o", s=65, color="green",
+                    zorder=4, label="Início")
+        ax.scatter(*robot_path[-1], marker="X", s=85, color="crimson",
+                    zorder=4, label="Fim")
+
+    ax.set_title("Navegação do Pioneer — trajetória e laser no referencial global")
+    ax.set_xlabel("X mundo [m]")
+    ax.set_ylabel("Y mundo [m]")
+    ax.grid(True, linestyle=":", alpha=0.7)
+    ax.set_aspect("equal")
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
+    ax.legend()
+
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    salvar_figura(output_path)
+    plt.close(fig)
+    return output_path
+
+
+def run_navigation(sim, output, duration=DEFAULT_NAVIGATION_DURATION):
+    """Executa a navegação básica e combina as varreduras no referencial global."""
+    robot = sim.getObject("/PioneerP3DX")
+    left_wheel = sim.getObject("/PioneerP3DX/leftMotor")
+    right_wheel = sim.getObject("/PioneerP3DX/rightMotor")
+    laser = sim.getObject("/PioneerP3DX/fastHokuyo")
+    sensor = HokuyoSensorSim(sim, "/PioneerP3DX/fastHokuyo")
+
+    robot_path = []
+    laser_points_world = []
+    max_sensor_range = 5.0
+    wheel_distance = 0.381
+    wheel_radius = 0.0975
+    last_reported_second = -1
+    last_sample_time = -np.inf
+    sample_period = 0.05
+    wall_deadline = time.monotonic() + max(10.0, duration * 3.0)
+
+    try:
+        start_simulation(sim)
+        # A cena aberta pode bloquear em sim.step() depois do primeiro passo.
+        # A simulação contínua permite a mesma amostragem incremental sem
+        # depender do modo stepping do servidor.
+        time.sleep(0.1)
+
+        while True:
+            if time.monotonic() > wall_deadline:
+                raise RuntimeError(
+                    "A simulação não avançou até a duração solicitada; "
+                    "verifique se a cena está rodando no CoppeliaSim."
+                )
+
+            resume_simulation_if_paused(sim)
+            sim_time = sim.getSimulationTime()
+            if sim_time >= duration:
+                break
+            if sim_time - last_sample_time < sample_period:
+                time.sleep(0.01)
+                continue
+            last_sample_time = sim_time
+
+            robot_position = sim.getObjectPosition(robot, sim.handle_world)
+            robot_path.append(robot_position[:2])
+
+            T_R_L = matriz_sim_para_numpy(sim.getObjectMatrix(laser, robot))
+            T_W_R = matriz_sim_para_numpy(
+                sim.getObjectMatrix(robot, sim.handle_world)
+            )
+            points_laser = sensor.get_points()
+            ranges = (np.linalg.norm(points_laser, axis=1)
+                      if len(points_laser) else np.empty(0))
+
+            if len(points_laser):
+                detected = ranges < max_sensor_range - 0.1
+                points_world = transform_laser_points_to_world(
+                    points_laser[detected], T_R_L, T_W_R
+                )
+                laser_points_world.extend(points_world.tolist())
+
+            v, w = choose_navigation_command(ranges)
+            wl = v / wheel_radius - (w * wheel_distance) / (2 * wheel_radius)
+            wr = v / wheel_radius + (w * wheel_distance) / (2 * wheel_radius)
+            sim.setJointTargetVelocity(left_wheel, wl)
+            sim.setJointTargetVelocity(right_wheel, wr)
+
+            current_second = int(sim_time)
+            if current_second != last_reported_second:
+                print(f"[INFO] Navegação: t={sim_time:.2f} s, "
+                      f"poses={len(robot_path)}, "
+                      f"pontos laser={len(laser_points_world)}")
+                last_reported_second = current_second
+
+            time.sleep(0.01)
+
+        output_path = normalizar_caminho_saida(output)
+        plot_navigation_history(robot_path, laser_points_world, output_path)
+        print(f"[INFO] Navegação encerrada: {len(robot_path)} poses, "
+              f"{len(laser_points_world)} pontos laser")
+        print(f"[SUCESSO] Gráfico global salvo em '{output_path}'")
+        return output_path
+    finally:
+        sim.setJointTargetVelocity(left_wheel, 0.0)
+        sim.setJointTargetVelocity(right_wheel, 0.0)
+        sim.stopSimulation()
 
 
 def salvar_figura(output):
@@ -223,14 +399,20 @@ def normalizar_caminho_saida(output):
 
 def main():
     parser = argparse.ArgumentParser(description="Transformações Homogêneas - TP1 Robótica Móvel")
-    parser.add_argument("--output", "-o", default="images/questao3.png", help="Caminho do arquivo de saída da imagem")
-    parser.add_argument("--question", choices=("3", "5"), default="3",
+    parser.add_argument("--output", "-o", default=None, help="Caminho do arquivo de saída da imagem")
+    parser.add_argument("--question", choices=("3", "5", "6"), default="3",
                         help="Questão a executar (padrão: 3)")
+    parser.add_argument("--duration", type=float,
+                        default=DEFAULT_NAVIGATION_DURATION,
+                        help="Duração da navegação em segundos de simulação "
+                             "(padrão: 40)")
     args = parser.parse_args()
 
     print(f"[INFO] Script em execução: {Path(__file__).resolve()}")
 
-    output_path = normalizar_caminho_saida(args.output)
+    default_output = ("images/questao6_navegacao_global.png"
+                      if args.question == "6" else "images/questao3.png")
+    output_path = normalizar_caminho_saida(args.output or default_output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Conexão com o CoppeliaSim via ZeroMQ Remote API
@@ -244,6 +426,9 @@ def main():
 
     if args.question == "5":
         run_question_5(sim, output_path)
+        return
+    if args.question == "6":
+        run_navigation(sim, output_path, duration=args.duration)
         return
 
     # Lista de elementos a serem mapeados na cena
