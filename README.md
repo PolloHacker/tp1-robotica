@@ -1,13 +1,5 @@
 # Trabalho Prático 1 — Ferramentas e Transformações
 
-**Disciplina:** Robótica Móvel  
-**Professor:** Prof. Douglas G. Macharet  
-
----
-
-- Isaac Reyes Alves de Abreu - 2025050342
-- Pedro Luiz Silva - 2024006129
-
 ---
 
 ## Questão 1
